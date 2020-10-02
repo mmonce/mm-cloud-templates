@@ -1,0 +1,119 @@
+formatVersion: 1
+inputs:
+  platform:
+    type: string
+    enum:
+      - 'plat:aws'
+      - 'plat:azure'
+      - 'plat:vsphere'
+    default: 'plat:aws'
+    title: Cloud Platform
+    format: ''
+  username:
+    type: string
+    default: ec2user
+    title: Username
+  password:
+    type: string
+    default: VMware1!
+    title: Password
+    encrypted: true
+  flavor:
+    type: string
+    enum:
+      - small
+      - medium
+      - large
+    title: Size
+  minioncount:
+    type: integer
+    title: '# Minions'
+    minimum: 1
+    maximum: 8
+    default: '1'
+resources:
+  Cloud_Volume_1:
+    type: Cloud.Volume
+    properties:
+      capacityGb: 100
+      count: 1
+  Salt Minion:
+    type: Cloud.Machine
+    properties:
+      image: ubuntu
+      flavor: '${input.flavor}'
+      count: '${input.minioncount}'
+      networks:
+        - network: '${resource.Cloud_Network_1.id}'
+      constraints:
+        - tag: '${input.platform}'
+      cloudConfig: |-
+        #!/bin/sh
+        #cloud-config
+        ssh_pwauth: yes
+        chpasswd:
+          list: |
+            ${input.username}:${input.password}
+          expire: false
+        users:
+          - default
+          - name: ${input.username}
+            lock_passwd: false
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            groups: [wheel, sudo, admin]
+            shell: '/bin/bash'
+            ssh-authorized-keys:
+              - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDytVL+Q6/+vGbmkXoRpX dmettem@dmettem-m01.vmware.com
+        runcmd:
+          - sudo echo "Defaults:${input.username}  !requiretty" >> /etc/sudoers.d/${input.username}          
+          - sudo add-apt-repository ppa:saltstack/salt -y
+          - sudo apt-get update -y
+          - sudo apt-get install salt-minion -y
+          #- sudo sed -i 's/#master: salt/master: 127.0.0.1/' /etc/salt/minion          
+  Salt Master:
+    type: Cloud.Machine
+    properties:
+      image: ubuntu
+      flavor: '${input.flavor}'
+      networks:
+        - network: '${resource.Cloud_Network_1.id}'
+      storage: null
+      constraints:
+        - tag: '${input.platform}'
+      cloudConfig: |-
+        #!/bin/sh
+        #cloud-config
+        ssh_pwauth: yes
+        chpasswd:
+          list: |
+            ${input.username}:${input.password}
+          expire: false
+        users:
+          - default
+          - name: ${input.username}
+            lock_passwd: false
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            groups: [wheel, sudo, admin]
+            shell: '/bin/bash'
+            ssh-authorized-keys:
+              - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDytVL+Q6/+vGbmkXoRpX dmettem@dmettem-m01.vmware.com
+        runcmd:
+          - sudo echo "Defaults:${input.username}  !requiretty" >> /etc/sudoers.d/${input.username}          
+          - sudo add-apt-repository ppa:saltstack/salt -y
+          - sudo apt-get update -y
+          - sudo apt-get install salt-minion -y
+          - sudo apt-get install salt-master -y
+          - sudo apt-get install salt-api -y
+          - sudo apt-get install salt-cloud -y
+          - sudo apt-get install salt-ssh -y
+          - sudo apt-get install salt-syndic -y
+          #- sudo sed -i 's/#master: salt/master: 127.0.0.1/' /etc/salt/minion
+          - sudo salt-minion -d
+      remoteAccess:
+        authentication: generatedPublicPrivateKey
+      attachedDisks:
+        - source: '${resource.Cloud_Volume_1.id}'
+  Cloud_Network_1:
+    type: Cloud.Network
+    properties:
+      networkType: existing
